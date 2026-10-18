@@ -1,0 +1,34 @@
+# dashboard_v5 전용 테마 (스크립트 위치 설정)
+# `streamlit run dashboard_v5/app.py`로 실행하면 저장소 최상위 .streamlit/config.toml보다 이 파일이 먼저 적용된다.
+# 색은 v2(dashboard_v2/theme.py TOKENS)를 따른다. 사이드바 육각 무늬는 shared.py의 CSS로 넣는다.
+[theme]
+base = "light"
+primaryColor = "#0b5be0"
+backgroundColor = "#f3f7fc"
+secondaryBackgroundColor = "#eaf1fb"
+textColor = "#0b1b33"
+borderColor = "#d6e1f0"
+linkColor = "#0b5be0"
+dataframeHeaderBackgroundColor = "#eaf1fb"
+baseRadius = "10px"
+font = "Pretendard, 'Malgun Gothic', sans-serif"
+headingFont = "Pretendard, 'Malgun Gothic', sans-serif"
+headingFontWeights = [800, 700, 700, 700, 600, 600]
+
+[[theme.fontFaces]]
+family = "Pretendard"
+url = "https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/woff2/PretendardVariable.woff2"
+weight = "100 900"
+
+[theme.sidebar]
+backgroundColor = "#061c52"
+secondaryBackgroundColor = "#0b2b72"
+textColor = "#e6f1ff"
+primaryColor = "#35d6f5"
+borderColor = "#1b3f8f"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
