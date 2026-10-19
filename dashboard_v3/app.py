@@ -4,6 +4,8 @@
     .venv/Scripts/python.exe -m streamlit run dashboard_v3/app.py
 """
 import base64
+import hashlib
+import importlib
 import time
 from html import escape
 from pathlib import Path
@@ -18,11 +20,16 @@ st.set_page_config(page_title="보안 관제 현황", layout="wide", initial_sid
 
 
 @st.cache_data
-def load():
+def load(code_version):
+    """data.py 내용이 바뀌면(code_version) 모듈을 다시 불러와 새로 계산한다.
+
+    Streamlit은 바뀐 보조 모듈을 다시 불러오지 않을 때가 있어 직접 reload한다.
+    """
+    importlib.reload(data)
     return data.load()
 
 
-D = load()
+D = load(hashlib.md5(Path(data.__file__).read_bytes()).hexdigest())
 LOGO = "data:image/png;base64," + base64.b64encode(
     (Path(__file__).parent / "assets" / "sesac_security_logo.png").read_bytes()).decode()
 DAYS = D["days"]
