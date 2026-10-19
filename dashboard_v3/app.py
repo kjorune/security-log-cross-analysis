@@ -37,10 +37,6 @@ DAYS = D["days"]
 RED, AMBER, BLUE, NAVY, NAVY2 = "#FF4B4B", "#F5B740", "#67BAF4", "#1E466B", "#2C5F8E"
 MUTE, DIM, GRAY = "#A0A7B1", "#636A74", "#3A3F47"
 LOGC = {"Sysmon": "#67BAF4", "NGINX": "#2C7BB8", "SSHD": "#1E466B", "Audit": "#A9D6F8"}
-TAC = {"Initial Access": "초기 침투", "Reconnaissance": "정찰", "Execution": "실행", "Persistence": "지속",
-       "Command and Control": "원격 제어", "Credential Access": "계정 정보 접근", "Collection": "수집",
-       "Exfiltration": "유출", "Defense Evasion": "탐지 회피", "Discovery": "탐색",
-       "Lateral Movement": "내부 이동", "Impact": "파괴·변경"}
 SES_TYPE = {"web_only": "웹", "server_only": "서버", "server+web": "서버+웹"}
 ROLE = {"application": "앱", "bastion": "접속 관문", "operations": "운영", "web": "웹"}
 SEV = {r["id"]: r["sev"] for r in D["rules"]}
@@ -126,8 +122,6 @@ CSS = """
 .track{height:6px;background:#22252B;border-radius:1px;flex:1;min-width:50px;position:relative}
 .fill{height:100%;border-radius:1px;animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
 .track .th{position:absolute;top:-3px;bottom:-3px;width:1px;background:#A0A7B1;opacity:.7}
-.dots{display:inline-flex;gap:2px;vertical-align:middle;margin-left:5px}
-.dots i{width:5px;height:9px;background:#2A2D33}.dots i.on{background:#4F7EA8}
 .tag{display:inline-block;padding:0 6px;border-radius:3px;font-size:11px;font-weight:700;line-height:17px}
 .t-red{background:rgba(255,75,75,.15);color:#FF4B4B}.t-amber{background:rgba(245,183,64,.13);color:#F5B740}
 .t-blue{background:rgba(103,186,244,.13);color:#67BAF4}.t-gray{background:#23262C;color:#A0A7B1}
@@ -140,9 +134,6 @@ CSS = """
 .detail{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
 .dh{grid-column:1/3;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .dh .id{color:#A0A7B1}.dh .who{font-size:15px;font-weight:800}.dh .pt{font-size:15px;font-weight:800;color:#FF4B4B}
-.chain{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-left:auto}
-.chain span{background:#1F2228;border:1px solid #33373F;padding:3px 7px;border-radius:3px;font-weight:600;font-size:12px}
-.chain em{color:#636A74;font-style:normal;font-size:11px}
 .facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;align-content:start;padding-top:2px}
 .fact{display:flex;gap:7px;align-items:baseline;min-width:0}
 .fact .k{color:#636A74;font-size:11.5px;flex:none;width:54px}
@@ -291,9 +282,7 @@ TIP_SAVED = "분석 결과 CSV로 만든 화면\n실시간 수집 아님"
 TIP_SCORE = "신호 점수 합 (같은 유형은 최대값 1개)\n신호 점수 = 기본 점수 × 서버 중요도 × 연결 신뢰도\n세로선 = 경보 기준 100점"
 TIP_MAX = "같은 세션·같은 유형은 최대값 1개만 반영\n×2 = 같은 유형 신호 2건\n추정 = 그 유형 신호가 모두 추정 연결 (× 0.8)"
 TIP_BASIS = "직접: 세션에 직접 속한 신호만\n직접+추정: 추정 연결을 빼도 100점 이상\n추정 의존: 추정 연결을 빼면 100점 미만\n추정 연결 = 같은 시각 시스템 활동을 세션에 연결"
-TIP_ALERT = "경보: 세션 점수 100점 이상\n전술은 공격 목적 분류 · 경보 조건 아님"
-TIP_TACTIC = "ATT&CK 전술 수\n공격 목적 분류 · 경보 조건 아님"
-TIP_CHAIN = "전술이 처음 나타난 시각 순서"
+TIP_ALERT = "경보: 세션 점수 100점 이상"
 
 
 def html_top():
@@ -322,7 +311,7 @@ def html_kpis():
     cards = [
         ("crit", "경보 세션", TIP_ALERT, len(a), "건",
          f'사용자 <b>{len({x["user"] for x in a})}명</b> · 최고 <b class="red">{top}점</b>', spark(D["alertDaily"], RED)),
-        ("warn", "주의 세션", "행동 신호는 있지만 100점 미만\n모두 20점 · 관련 전술 0개", len(D["watch"]), "건",
+        ("warn", "주의 세션", "행동 신호는 있지만 100점 미만\n모두 20점", len(D["watch"]), "건",
          "모두 <b>20점</b> · 경보 기준 미달", ""),
         ("info", "탐지 신호", f"규칙 {det['rule']} + 행동 {det['behavior']}\n점수 계산 대상 {det['scored']} = 직접 {det['direct']} + 추정 연결 {det['linked']}\nR16 {det['r16']}건은 설정 위험으로 분리 · 점수 제외", det["total"], "건",
          f'점수 대상 <b>{det["scored"]}</b> · R16 <b>{det["r16"]}</b>',
@@ -347,16 +336,15 @@ def html_alert_table(sel):
     for i, a in enumerate(D["alerts"]):
         zone = '<span class="tag t-red">외부</span>' if a["zone"] == "external" else '<span class="tag t-gray">내부</span>'
         attr = link_tag(a["link"])
-        dots = "".join(f'<i class="{"on" if k <= a["tactics"] else ""}"></i>' for k in range(1, 6))
         rows.append(
             f'<tr class="{"sel" if a["id"] == sel else ""}"><td class="dim">{i + 1}</td><td class="mono">{a["id"]}</td>'
             f'<td class="user">{a["user"]}</td>'
             f'<td style="width:25%"><div class="sc"><b>{a["score"]}</b>{bar(a["score"] / mx * 100, RED, 100 / mx * 100)}</div></td>'
-            f'<td><b>{a["tactics"]}</b><span class="dots">{dots}</span></td><td>{a["start"]}</td>'
+            f'<td>{a["start"]}</td>'
             f'<td><span class="mono">{a["ip"]}</span> {zone}</td><td class="mu">{", ".join(a["hosts"]) or "-"}</td><td>{attr}</td></tr>')
     head = ("<tr><th></th><th>세션</th><th>사용자</th>"
             f'<th>점수 {q(TIP_SCORE)}</th>'
-            f"<th>전술 {q(TIP_TACTIC)}</th><th>시작</th><th>접속 IP</th><th>서버</th>"
+            "<th>시작</th><th>접속 IP</th><th>서버</th>"
             f'<th>연결 {q(TIP_BASIS, right=True)}</th></tr>')
     return f'<table class="tbl fx"><thead>{head}</thead><tbody>{"".join(rows)}</tbody></table>'
 
@@ -398,15 +386,12 @@ def sig_row(s, smx):
 def html_detail(a):
     smx = max(s["score"] for s in a["signals"])
     top, rest = a["signals"][:5], a["signals"][5:]
-    chain = "".join(f'{"<em>→</em>" if i else ""}<span class="tt" data-tip="{escape(t)}">{TAC.get(t, t)}</span>'
-                    for i, t in enumerate(a["chain"]))
     fx = "".join(f'<div class="fact"><span class="k">{k}</span><span class="v {c}" title="{escape(v)}">{escape(v)}</span></div>'
                  for k, v, c in facts(a))
     sigs = "".join(sig_row(s, smx) for s in top)
     more = f'<div class="more">외 {len(rest)}종 +{sum(s["score"] for s in rest)}점</div>' if rest else ""
     return (f'<div class="detail fx"><div class="dh"><span class="id mono">{a["id"]}</span><span class="who">{a["user"]}</span>'
-            f'<span class="pt">{a["score"]}점</span><span class="mu">전술 {a["tactics"]} · {a["link"]} 연결</span>'
-            f'<div class="chain">{chain}{q(TIP_CHAIN, right=True)}</div></div>'
+            f'<span class="pt">{a["score"]}점</span><span class="mu">{a["link"]} 연결</span></div>'
             f'<div class="facts">{fx}</div>'
             f'<div class="sigs"><div class="cap"><span>점수 구성 {q(TIP_MAX)}</span>'
             f'<span>{len(a["signals"])}종 · 신호 {sum(s["n"] for s in a["signals"])}건</span></div>{sigs}{more}</div></div>')
@@ -539,9 +524,9 @@ def html_watch():
     rows = "".join(
         f'<tr><td class="mono">{w["id"]}</td><td class="user">{w["user"]}</td><td><b class="amber">{w["score"]}</b></td>'
         f'<td>{w["start"]}</td><td><span class="chip">{w["sid"]}</span> {w["signal"]}</td><td class="mu">{w["fact"]}</td>'
-        f'<td>{w["tactics"]}</td><td><span class="tag t-gray">경보 기준 미달</span></td></tr>' for w in D["watch"])
+        f'<td><span class="tag t-gray">경보 기준 미달</span></td></tr>' for w in D["watch"])
     return ('<table class="tbl fx"><thead><tr><th>세션</th><th>사용자</th><th>점수</th><th>시작</th><th>신호</th>'
-            f'<th>근거</th><th>전술</th><th>판정</th></tr></thead><tbody>{rows}</tbody></table>')
+            f'<th>근거</th><th>판정</th></tr></thead><tbody>{rows}</tbody></table>')
 
 
 def html_rules():
@@ -563,7 +548,7 @@ def html_criteria():
             '<div class="cc"><div class="k">계수</div><div class="v">서버 높음 1.5·중간 1.0 · 연결 직접 1.0·추정 0.8</div></div></div>'
             '<div class="crit-notes fx">'
             '<span>같은 세션·같은 유형은 최대값 1개만 반영 후 유형별 합산</span>'
-            '<span>전술은 공격 목적 분류 · 점수는 조사 우선순위용</span>'
+            '<span>점수는 조사 우선순위용</span>'
             '<span>설정 문제(R16)는 별도 관리</span>'
             '<span>행동 기준선: 과거 세션 5개 이상 · 시작 시각 2시간 이상 이탈 · 처음 보는 IP·경로 · 과거 최대 초과</span></div>')
 

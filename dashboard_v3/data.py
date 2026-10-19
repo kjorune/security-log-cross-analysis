@@ -81,7 +81,7 @@ def load():
     ]
 
     # ── 세션 점수 ───────────────────────────────────────────
-    # 경보 기준은 발표 자료(15쪽)와 같이 세션 점수 100점 이상. 전술은 공격 목적 분류로만 쓴다.
+    # 경보 기준은 발표 자료(15쪽)·scripts/10_risk.py와 같은 세션 점수 100점 이상.
     sr["score"] = sr["risk_score"].astype(float)
     sr["t"] = kst(sr["start_utc"])
     alerts_df = sr[sr.score >= ALERT_SCORE].sort_values("score", ascending=False)
@@ -142,8 +142,6 @@ def load():
         host_set = {h.split(":")[0] for h in split_list(s.hosts)} | {e["host"] for e in evs if e["host"]}
         alerts.append({
             "id": r.work_session_id, "user": r.person_candidate, "score": round(r.score),
-            "tactics": int(r.tactic_count),
-            "chain": [x.strip() for x in str(c.tactic_chain).split("→")],
             "start": r.t.strftime("%m-%d %H:%M"), "day": r.t.strftime("%m-%d"),
             "usual": c.usual_hours_kst, "hourGap": int(num(c.hour_distance)),
             "ip": r.client_ip, "zone": c.ip_zone, "ipNew": c.ip_first_time_for_person == "true",
@@ -182,7 +180,7 @@ def load():
             "id": r.work_session_id, "user": r.person_candidate, "score": round(r.score),
             "start": r.t.strftime("%m-%d %H:%M"),
             "signal": sig[0]["name"] if sig else "", "sid": sig[0]["id"] if sig else "",
-            "fact": fact, "tactics": int(r.tactic_count),
+            "fact": fact,
         })
 
     # ── 사용자·서버 ─────────────────────────────────────────
