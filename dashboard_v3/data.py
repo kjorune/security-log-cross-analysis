@@ -88,7 +88,7 @@ def load():
     def signals_of(sid):
         e = ev[ev.work_session_id == sid].copy()
         e["s"] = e["signal_score"].astype(float)
-        g = e.groupby(["detection_type", "name"]).agg(score=("s", "sum"), n=("s", "size")).reset_index()
+        g = e.groupby(["detection_type", "name"]).agg(score=("s", "max"), n=("s", "size")).reset_index()
         g = g.sort_values("score", ascending=False)
         return [{"id": r.detection_type, "name": r.name, "score": round(r.score), "n": int(r.n)} for r in g.itertuples()]
 
@@ -167,12 +167,14 @@ def load():
     people = []
     for r in ent[ent.entity_type == "person"].itertuples():
         srows = sr[sr.person_candidate == r.entity]
+        # 최고 세션 점수: 세션 하나의 점수 중 최댓값 (max_24h는 24시간 누적이라 쓰지 않음)
+        top = srows.sort_values(["score", "t"], ascending=[False, False]).iloc[0]
         people.append({
-            "name": r.entity, "total": round(num(r.total_score)), "max": round(num(r.max_24h)),
-            "maxAt": r.max_24h_at, "alert": isinstance(r.alert_sessions, str),
+            "name": r.entity, "total": round(num(r.total_score)), "max": round(top.score),
+            "maxAt": top.work_session_id, "alert": isinstance(r.alert_sessions, str),
             "sessions": int(len(srows)), "scored": int((srows.score > 0).sum()),
         })
-    people.sort(key=lambda p: -p["total"])
+    people.sort(key=lambda p: (-p["max"], -p["total"]))
 
     hinv = hosts.set_index("host")
     host_rows = []

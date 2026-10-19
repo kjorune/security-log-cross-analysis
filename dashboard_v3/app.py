@@ -142,7 +142,9 @@ CSS = """
 .fact .v{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fact .v.hot{color:#FF4B4B}.fact .v.warm{color:#F5B740}
 .sigs .cap{display:flex;justify-content:space-between;color:#636A74;font-size:11.5px;margin-bottom:3px}
-.sigs .s{display:grid;grid-template-columns:30px 1fr 64px 28px;gap:7px;align-items:center;padding:2px 0}
+.sigs .cap span{display:inline-flex;align-items:center;gap:5px}
+.sigs .s{display:grid;grid-template-columns:30px 1fr 20px 64px 28px;gap:7px;align-items:center;padding:2px 0}
+.sigs .x{color:#A0A7B1;font-size:11px;text-align:right}
 .sigs .i{font-family:Consolas,monospace;font-size:11px;color:#A0A7B1}
 .sigs .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sigs .pv{text-align:right;font-weight:700}
@@ -270,6 +272,7 @@ def show_loading(slot, rows, sec=0.4):
 
 TIP_SAVED = "분석 결과 CSV로 만든 화면\n실시간 수집 아님"
 TIP_SCORE = "신호 점수 합\n신호 점수 = 기본점수 × 서버 중요도 × 확신도\n세로선 = 경보 기준 100"
+TIP_MAX = "같은 세션·같은 유형 신호는\n가장 높은 점수 1개만 반영\n×2 = 같은 유형 신호 2건"
 TIP_BASIS = "관측: 세션에 직접 속한 원본 이벤트로 확인\n추정: 같은 서버·시간대로 이어 붙임"
 
 
@@ -360,6 +363,15 @@ def facts(a):
     return f
 
 
+def sig_row(s, smx):
+    """점수 구성 한 줄. 같은 유형이 여러 건이면 최고값만 점수로 쓰고 건수를 ×n으로 붙인다."""
+    times = f'×{s["n"]}' if s["n"] > 1 else ""
+    color = sev_color(s["id"], SEV.get(s["id"], "")) if s["id"][0] == "R" else NAVY2
+    return (f'<div class="s"><span class="i">{s["id"]}</span>'
+            f'<span class="nm" title="{escape(s["name"])} · {s["n"]}건 중 최고값">{escape(s["name"])}</span>'
+            f'<span class="x">{times}</span>{bar(s["score"] / smx * 100, color)}<span class="pv">{s["score"]}</span></div>')
+
+
 def html_detail(a):
     smx = max(s["score"] for s in a["signals"])
     top, rest = a["signals"][:5], a["signals"][5:]
@@ -367,16 +379,14 @@ def html_detail(a):
                     for i, t in enumerate(a["chain"]))
     fx = "".join(f'<div class="fact"><span class="k">{k}</span><span class="v {c}" title="{escape(v)}">{escape(v)}</span></div>'
                  for k, v, c in facts(a))
-    sigs = "".join(
-        f'<div class="s"><span class="i">{s["id"]}</span><span class="nm" title="{escape(s["name"])} · {s["n"]}회">{escape(s["name"])}</span>'
-        f'{bar(s["score"] / smx * 100, sev_color(s["id"], SEV.get(s["id"], "")) if s["id"][0] == "R" else NAVY2)}'
-        f'<span class="pv">{s["score"]}</span></div>' for s in top)
+    sigs = "".join(sig_row(s, smx) for s in top)
     more = f'<div class="more">외 {len(rest)}종 +{sum(s["score"] for s in rest)}점</div>' if rest else ""
     return (f'<div class="detail fx"><div class="dh"><span class="id mono">{a["id"]}</span><span class="who">{a["user"]}</span>'
             f'<span class="pt">{a["score"]}점</span><span class="mu">전술 {a["tactics"]} · {a["verdict"]}</span>'
             f'<div class="chain">{chain}</div></div>'
             f'<div class="facts">{fx}</div>'
-            f'<div class="sigs"><div class="cap"><span>점수 구성</span><span>신호 {sum(s["n"] for s in a["signals"])}개</span></div>{sigs}{more}</div></div>')
+            f'<div class="sigs"><div class="cap"><span>점수 구성 {q(TIP_MAX)}</span>'
+            f'<span>{len(a["signals"])}종 · 신호 {sum(s["n"] for s in a["signals"])}건</span></div>{sigs}{more}</div></div>')
 
 
 def html_events(a):
@@ -394,7 +404,7 @@ def html_users():
     for p in D["people"]:
         c = RED if p["alert"] else AMBER if p["max"] else GRAY
         vc = RED if p["alert"] else AMBER if p["max"] else DIM
-        tip = f'{p["name"]}\n최고 {p["max"]}점 ({p["maxAt"]})\n16일 합계 {p["total"]}점\n세션 {p["sessions"]}개 · 점수 있는 세션 {p["scored"]}개'
+        tip = f'{p["name"]}\n최고 {p["max"]}점 ({p["maxAt"]})\n세션 점수 합계 {p["total"]}점\n세션 {p["sessions"]}개 · 점수 있는 세션 {p["scored"]}개'
         rows.append(f'<div class="ubar tt" data-tip="{escape(tip)}"><span class="nm {"" if p["max"] else "zero"}">{p["name"]}</span>'
                     f'{bar(max(p["max"] / mx * 100, 0.8 if p["max"] else 0), c, 100 / mx * 100)}'
                     f'<span class="val" style="color:{vc}">{p["max"]}</span></div>')
