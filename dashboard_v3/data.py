@@ -10,6 +10,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 DATA = HERE.parent / "data"
 KST = pd.Timedelta("9h")
+ALERT_SCORE = 100  # 경보: 세션 점수 100점 이상
 
 
 def read(rel):
@@ -60,6 +61,10 @@ def load():
     # ── 로그 수집 ───────────────────────────────────────────
     logs = {SRC[k]: per_day(tl.loc[tl.log_source == k, "day"]) for k in SRC}
     log_total = {SRC[k]: int((tl.log_source == k).sum()) for k in SRC}
+    # 로그 세 갈래 (발표 자료 12·16쪽): 사용자 업무 / 시스템 배경 / 외부 시도
+    bk = read("06_classified/timeline_classified.csv")["bucket"].value_counts()
+    buckets = {"session": int(bk.get("session", 0)), "background": int(bk.get("background", 0)),
+               "external": int(bk.get("external", 0))}
 
     # ── 탐지 신호 ───────────────────────────────────────────
     det["t"] = kst(det["event_time_utc"])
@@ -76,21 +81,31 @@ def load():
     ]
 
     # ── 세션 점수 ───────────────────────────────────────────
+    # 경보 기준은 발표 자료(15쪽)와 같이 세션 점수 100점 이상. 전술은 공격 목적 분류로만 쓴다.
     sr["score"] = sr["risk_score"].astype(float)
     sr["t"] = kst(sr["start_utc"])
-    alerts_df = sr[sr.alert == "true"].sort_values("score", ascending=False)
-    watch_df = sr[(sr.alert != "true") & (sr.score > 0)].sort_values(["score", "t"], ascending=[False, False])
+    alerts_df = sr[sr.score >= ALERT_SCORE].sort_values("score", ascending=False)
+    watch_df = sr[(sr.score < ALERT_SCORE) & (sr.score > 0)].sort_values(["score", "t"], ascending=[False, False])
 
     det_type = det.set_index("detection_id")["detection_type"].to_dict()
     det_name = det.set_index("detection_id")["name"].to_dict()
+    ev["s"] = ev["signal_score"].astype(float)
 
 
     def signals_of(sid):
-        e = ev[ev.work_session_id == sid].copy()
-        e["s"] = e["signal_score"].astype(float)
-        g = e.groupby(["detection_type", "name"]).agg(score=("s", "max"), n=("s", "size")).reset_index()
-        g = g.sort_values("score", ascending=False)
-        return [{"id": r.detection_type, "name": r.name, "score": round(r.score), "n": int(r.n)} for r in g.itertuples()]
+        """같은 세션·같은 유형은 최고값 1개. 그 유형 신호가 모두 추정 연결이면 linked=True."""
+        e = ev[ev.work_session_id == sid]
+        g = (e.groupby(["detection_type", "name"])
+             .agg(score=("s", "max"), n=("s", "size"), direct=("link", lambda x: (x == "direct").any()))
+             .reset_index().sort_values("score", ascending=False))
+        return [{"id": r.detection_type, "name": r.name, "score": round(r.score), "n": int(r.n),
+                 "linked": not r.direct} for r in g.itertuples()]
+
+
+    def direct_score(sid):
+        """추정 연결 신호를 빼고 직접 연결 신호만으로 다시 계산한 점수."""
+        e = ev[(ev.work_session_id == sid) & (ev.link == "direct")]
+        return round(e.groupby("detection_type").s.max().sum())
 
 
     def key_events(sid):
@@ -114,9 +129,16 @@ def load():
     alerts = []
     for r in alerts_df.itertuples():
         c, s = ctx.loc[r.work_session_id], ses.loc[r.work_session_id]
-        t = tri.loc[r.work_session_id]
         flows = inc[inc.incident == r.work_session_id]
         evs = key_events(r.work_session_id)
+        sigs = signals_of(r.work_session_id)
+        dscore = direct_score(r.work_session_id)
+        if not any(x["linked"] for x in sigs):
+            link = "직접"
+        elif dscore >= ALERT_SCORE:
+            link = "직접+추정"
+        else:
+            link = "추정 의존"
         host_set = {h.split(":")[0] for h in split_list(s.hosts)} | {e["host"] for e in evs if e["host"]}
         alerts.append({
             "id": r.work_session_id, "user": r.person_candidate, "score": round(r.score),
@@ -135,8 +157,8 @@ def load():
             "config": split_list(c.config_changes),
             "concurrent": split_list(c.concurrent_sessions_same_host),
             "gaps": int(num(c.data_gaps)),
-            "verdict": t.activity_verdict, "attr": t.attribution,
-            "signals": signals_of(r.work_session_id),
+            "link": link, "directScore": dscore,
+            "signals": sigs,
             "events": evs,
             "flowCount": int(len(flows)),
             "flowBasis": {k: int(v) for k, v in flows.basis.value_counts().items()},
@@ -160,7 +182,7 @@ def load():
             "id": r.work_session_id, "user": r.person_candidate, "score": round(r.score),
             "start": r.t.strftime("%m-%d %H:%M"),
             "signal": sig[0]["name"] if sig else "", "sid": sig[0]["id"] if sig else "",
-            "fact": fact, "verdict": t.activity_verdict if t is not None else "",
+            "fact": fact, "tactics": int(r.tactic_count),
         })
 
     # ── 사용자·서버 ─────────────────────────────────────────
@@ -171,7 +193,7 @@ def load():
         top = srows.sort_values(["score", "t"], ascending=[False, False]).iloc[0]
         people.append({
             "name": r.entity, "total": round(num(r.total_score)), "max": round(top.score),
-            "maxAt": top.work_session_id, "alert": isinstance(r.alert_sessions, str),
+            "maxAt": top.work_session_id, "alert": bool(top.score >= ALERT_SCORE),
             "sessions": int(len(srows)), "scored": int((srows.score > 0).sum()),
         })
     people.sort(key=lambda p: (-p["max"], -p["total"]))
@@ -206,6 +228,7 @@ def load():
     mfa_det = det[det.detection_type == "R16"]
     mfa = {
         "n": int(mfa_row["count"]), "account": mfa_row.account.split("@")[0],
+        "findings": int((cfg.rule == "R16").sum()),
         "daily": per_day(mfa_det["day"]),
         "first": kst(pd.Series([mfa_row.first_seen]))[0].strftime("%m-%d"),
         "last": kst(pd.Series([mfa_row.last_seen]))[0].strftime("%m-%d"),
@@ -222,11 +245,13 @@ def load():
         "period": {"from": tl["t"].min().strftime("%Y-%m-%d"), "to": tl["t"].max().strftime("%Y-%m-%d"),
                    "last": tl["t"].max().strftime("%m-%d %H:%M")},
         "days": days,
-        "logs": logs, "logTotal": log_total, "logAll": int(len(tl)),
+        "logs": logs, "logTotal": log_total, "logAll": int(len(tl)), "buckets": buckets,
         "sessionsAll": int(len(sr)), "scoredAll": int((sr.score > 0).sum()),
         "detections": {"total": int(len(det)), "rule": int((det.method == "rule").sum()),
                        "behavior": int((det.method == "behavior").sum()),
                        "scored": int(ev.detection_id.nunique()),
+                       "direct": int((ev.link == "direct").sum()), "linked": int((ev.link == "linked").sum()),
+                       "r16": int((det.detection_type == "R16").sum()),
                        "high": int((det.severity == "high").sum()),
                        "daily": per_day(det["day"]), "types": signal_types},
         "alertDaily": per_day(alerts_df["t"].dt.strftime("%m-%d")),

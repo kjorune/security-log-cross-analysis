@@ -127,7 +127,7 @@ CSS = """
 .fill{height:100%;border-radius:1px;animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
 .track .th{position:absolute;top:-3px;bottom:-3px;width:1px;background:#A0A7B1;opacity:.7}
 .dots{display:inline-flex;gap:2px;vertical-align:middle;margin-left:5px}
-.dots i{width:5px;height:9px;background:#2A2D33}.dots i.on{background:#FF4B4B}
+.dots i{width:5px;height:9px;background:#2A2D33}.dots i.on{background:#4F7EA8}
 .tag{display:inline-block;padding:0 6px;border-radius:3px;font-size:11px;font-weight:700;line-height:17px}
 .t-red{background:rgba(255,75,75,.15);color:#FF4B4B}.t-amber{background:rgba(245,183,64,.13);color:#F5B740}
 .t-blue{background:rgba(103,186,244,.13);color:#67BAF4}.t-gray{background:#23262C;color:#A0A7B1}
@@ -150,7 +150,7 @@ CSS = """
 .fact .v.hot{color:#FF4B4B}.fact .v.warm{color:#F5B740}
 .sigs .cap{display:flex;justify-content:space-between;color:#636A74;font-size:11.5px;margin-bottom:3px}
 .sigs .cap span{display:inline-flex;align-items:center;gap:5px}
-.sigs .s{display:grid;grid-template-columns:30px 1fr 20px 64px 28px;gap:7px;align-items:center;padding:2px 0}
+.sigs .s{display:grid;grid-template-columns:30px 1fr 44px 56px 28px;gap:7px;align-items:center;padding:2px 0}
 .sigs .x{color:#A0A7B1;font-size:11px;text-align:right}
 .sigs .i{font-family:Consolas,monospace;font-size:11px;color:#A0A7B1}
 .sigs .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -201,7 +201,9 @@ CSS = """
 .stack div{height:100%}
 
 /* 판정 기준 */
-.cc-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.cc-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+.crit-notes{display:flex;flex-wrap:wrap;gap:4px 18px;color:#A0A7B1;font-size:12px;margin-bottom:10px}
+.crit-notes span::before{content:"· ";color:#636A74}
 .cc{background:#1B1D22;border:1px solid #272A31;border-radius:5px;padding:8px 10px}
 .cc .k{color:#636A74;font-size:11.5px}.cc .v{font-size:14px;font-weight:700;margin-top:2px}
 .rules td{font-size:12px;padding:4px 6px}
@@ -252,11 +254,19 @@ def chip(sid):
     return f'<span class="chip{" h" if SEV.get(sid) == "high" else ""}">{sid}</span>'
 
 
+SEV_KO = {"high": "높음", "medium": "중간", "low": "낮음"}
+
+
+def link_tag(link):
+    cls = {"직접": "t-blue", "직접+추정": "t-blue", "추정 의존": "t-amber"}[link]
+    return f'<span class="tag {cls}">{link}</span>'
+
+
 def sev_tag(sev):
     if not sev:
         return '<span class="dim">-</span>'
     cls = {"high": "t-red", "medium": "t-amber"}.get(sev, "t-gray")
-    return f'<span class="tag {cls}">{sev}</span>'
+    return f'<span class="tag {cls}">{SEV_KO.get(sev, sev)}</span>'
 
 
 def changed(key, init=None):
@@ -278,9 +288,12 @@ def show_loading(slot, rows, sec=0.4):
 
 
 TIP_SAVED = "분석 결과 CSV로 만든 화면\n실시간 수집 아님"
-TIP_SCORE = "신호 점수 합\n신호 점수 = 기본점수 × 서버 중요도 × 확신도\n세로선 = 경보 기준 100"
-TIP_MAX = "같은 세션·같은 유형 신호는\n가장 높은 점수 1개만 반영\n×2 = 같은 유형 신호 2건"
-TIP_BASIS = "관측: 세션에 직접 속한 원본 이벤트로 확인\n추정: 같은 서버·시간대로 이어 붙임"
+TIP_SCORE = "신호 점수 합 (같은 유형은 최대값 1개)\n신호 점수 = 기본 점수 × 서버 중요도 × 연결 신뢰도\n세로선 = 경보 기준 100점"
+TIP_MAX = "같은 세션·같은 유형은 최대값 1개만 반영\n×2 = 같은 유형 신호 2건\n추정 = 그 유형 신호가 모두 추정 연결 (× 0.8)"
+TIP_BASIS = "직접: 세션에 직접 속한 신호만\n직접+추정: 추정 연결을 빼도 100점 이상\n추정 의존: 추정 연결을 빼면 100점 미만\n추정 연결 = 같은 시각 시스템 활동을 세션에 연결"
+TIP_ALERT = "경보: 세션 점수 100점 이상\n전술은 공격 목적 분류 · 경보 조건 아님"
+TIP_TACTIC = "ATT&CK 전술 수\n공격 목적 분류 · 경보 조건 아님"
+TIP_CHAIN = "전술이 처음 나타난 시각 순서"
 
 
 def html_top():
@@ -302,24 +315,24 @@ def spark(vals, color, hi=None):
 
 
 def html_kpis():
-    a, det, ex, mfa = D["alerts"], D["detections"], D["external"], D["mfa"]
+    a, det, ex, mfa, bk = D["alerts"], D["detections"], D["external"], D["mfa"], D["buckets"]
     top = max(x["score"] for x in a)
     log_sum = [sum(D["logs"][k][i] for k in D["logs"]) for i in range(len(DAYS))]
     det_hi = [RED if D["alertDaily"][i] else None for i in range(len(DAYS))]
     cards = [
-        ("crit", "경보 세션", "세션 점수 100 이상\n또는 ATT&CK 전술 3개 이상", len(a), "건",
+        ("crit", "경보 세션", TIP_ALERT, len(a), "건",
          f'사용자 <b>{len({x["user"] for x in a})}명</b> · 최고 <b class="red">{top}점</b>', spark(D["alertDaily"], RED)),
-        ("warn", "주의 세션", "점수는 있지만 경보 기준 미달\n행동 신호 1개 (20점)", len(D["watch"]), "건",
-         "모두 <b>20점</b> · 오탐 후보", ""),
-        ("info", "탐지 신호", f"룰·행동 탐지가 남긴 신호\n점수 반영 {det['scored']}건", det["total"], "건",
-         f'high <b class="red">{det["high"]}</b> · 룰 <b>{det["rule"]}</b> · 행동 <b>{det["behavior"]}</b>',
+        ("warn", "주의 세션", "행동 신호는 있지만 100점 미만\n모두 20점 · 관련 전술 0개", len(D["watch"]), "건",
+         "모두 <b>20점</b> · 경보 기준 미달", ""),
+        ("info", "탐지 신호", f"규칙 {det['rule']} + 행동 {det['behavior']}\n점수 계산 대상 {det['scored']} = 직접 {det['direct']} + 추정 연결 {det['linked']}\nR16 {det['r16']}건은 설정 위험으로 분리 · 점수 제외", det["total"], "건",
+         f'점수 대상 <b>{det["scored"]}</b> · R16 <b>{det["r16"]}</b>',
          spark(det["daily"], BLUE, det_hi)),
         ("", "외부 로그인 시도", "세션 없는 외부 IP의 SSH 시도\n모두 없는 계정 이름", ex["total"], "회",
          f'IP <b>{len(ex["ips"])}개</b> · 성공 <b>{ex["success"]}</b>', spark(ex["daily"], "#2C7BB8")),
-        ("", "MFA 없는 root 로그인", "계정 설정 위험\n행동 이상 아님 · 점수 제외", mfa["n"], "회",
-         f'<b>{mfa["account"]}</b> · {mfa["first"]}~{mfa["last"]} 매일', spark(mfa["daily"], "#2C7BB8")),
-        ("ref", "수집 로그", "로그 4종 정규화 행 수", D["logAll"], "행",
-         f'4종 · 세션 <b>{D["sessionsAll"]}</b>', spark(log_sum, NAVY)),
+        ("", "설정 위험", f"R16 MFA 미적용 root 로그인 {mfa['n']}건을\n설정 문제 {mfa['findings']}건으로 분리\n세션 점수 제외", mfa["findings"], "건",
+         f'MFA 미적용 <b>{mfa["account"]}</b> 로그인 <b>{mfa["n"]}</b>회', spark(mfa["daily"], "#2C7BB8")),
+        ("ref", "수집 로그", f"로그 4종 정규화 행 수\n사용자 업무 {fmt(bk['session'])} · 시스템 배경 {fmt(bk['background'])} · 외부 시도 {fmt(bk['external'])}", D["logAll"], "행",
+         f'업무 <b>{fmt(bk["session"])}</b> · 세션 <b>{D["sessionsAll"]}</b>', spark(log_sum, NAVY)),
     ]
     body = "".join(
         f'<div class="kpi {c} fx" style="animation-delay:{i * 60}ms"><div class="lb">{lb}{q(tip, right=i == 5)}</div>'
@@ -333,7 +346,7 @@ def html_alert_table(sel):
     rows = []
     for i, a in enumerate(D["alerts"]):
         zone = '<span class="tag t-red">외부</span>' if a["zone"] == "external" else '<span class="tag t-gray">내부</span>'
-        attr = '<span class="tag t-blue">관측</span>' if a["attr"] == "관측" else '<span class="tag t-amber">추정</span>'
+        attr = link_tag(a["link"])
         dots = "".join(f'<i class="{"on" if k <= a["tactics"] else ""}"></i>' for k in range(1, 6))
         rows.append(
             f'<tr class="{"sel" if a["id"] == sel else ""}"><td class="dim">{i + 1}</td><td class="mono">{a["id"]}</td>'
@@ -343,8 +356,8 @@ def html_alert_table(sel):
             f'<td><span class="mono">{a["ip"]}</span> {zone}</td><td class="mu">{", ".join(a["hosts"]) or "-"}</td><td>{attr}</td></tr>')
     head = ("<tr><th></th><th>세션</th><th>사용자</th>"
             f'<th>점수 {q(TIP_SCORE)}</th>'
-            "<th>전술</th><th>시작</th><th>접속 IP</th><th>서버</th>"
-            f'<th>근거 {q(TIP_BASIS, right=True)}</th></tr>')
+            f"<th>전술 {q(TIP_TACTIC)}</th><th>시작</th><th>접속 IP</th><th>서버</th>"
+            f'<th>연결 {q(TIP_BASIS, right=True)}</th></tr>')
     return f'<table class="tbl fx"><thead>{head}</thead><tbody>{"".join(rows)}</tbody></table>'
 
 
@@ -356,6 +369,9 @@ def facts(a):
           "warm" if a["hourGap"] >= 3 else ""),
          ("경로", f'{a["type"]} · 평소 {SES_TYPE.get(a["usualType"], a["usualType"])}', "warm" if a["type"] != SES_TYPE.get(a["usualType"]) else ""),
          ("길이", f'{a["dur"]}분 · 이벤트 {a["flowCount"]}', "")]
+    if a["link"] != "직접":
+        keep = a["directScore"] >= 100
+        f.insert(0, ("추정 제외", f'{a["directScore"]}점 · 경보 {"유지" if keep else "제외"}', "warm" if not keep else ""))
     if a["failBefore"]:
         f.append(("로그인 전", f'실패 {a["failBefore"]}회', "warm"))
     if a["files"]:
@@ -372,7 +388,7 @@ def facts(a):
 
 def sig_row(s, smx):
     """점수 구성 한 줄. 같은 유형이 여러 건이면 최고값만 점수로 쓰고 건수를 ×n으로 붙인다."""
-    times = f'×{s["n"]}' if s["n"] > 1 else ""
+    times = ("추정 " if s["linked"] else "") + (f'×{s["n"]}' if s["n"] > 1 else "")
     color = sev_color(s["id"], SEV.get(s["id"], "")) if s["id"][0] == "R" else NAVY2
     return (f'<div class="s"><span class="i">{s["id"]}</span>'
             f'<span class="nm" title="{escape(s["name"])} · {s["n"]}건 중 최고값">{escape(s["name"])}</span>'
@@ -389,8 +405,8 @@ def html_detail(a):
     sigs = "".join(sig_row(s, smx) for s in top)
     more = f'<div class="more">외 {len(rest)}종 +{sum(s["score"] for s in rest)}점</div>' if rest else ""
     return (f'<div class="detail fx"><div class="dh"><span class="id mono">{a["id"]}</span><span class="who">{a["user"]}</span>'
-            f'<span class="pt">{a["score"]}점</span><span class="mu">전술 {a["tactics"]} · {a["verdict"]}</span>'
-            f'<div class="chain">{chain}</div></div>'
+            f'<span class="pt">{a["score"]}점</span><span class="mu">전술 {a["tactics"]} · {a["link"]} 연결</span>'
+            f'<div class="chain">{chain}{q(TIP_CHAIN, right=True)}</div></div>'
             f'<div class="facts">{fx}</div>'
             f'<div class="sigs"><div class="cap"><span>점수 구성 {q(TIP_MAX)}</span>'
             f'<span>{len(a["signals"])}종 · 신호 {sum(s["n"] for s in a["signals"])}건</span></div>{sigs}{more}</div></div>')
@@ -431,15 +447,15 @@ def html_hosts():
                         for s in h["signals"])
         cards.append(f'<div class="host"><span class="hn">{h["name"]}</span>'
                      f'<span class="hr">{ROLE.get(h["role"], h["role"])} · <span class="mono">{h["ip"]}</span> · 중요도 '
-                     f'<b style="color:{"#FAFAFA" if h["crit"] == "high" else MUTE}">{h["crit"]}</b></span>'
+                     f'<b style="color:{"#FAFAFA" if h["crit"] == "high" else MUTE}">{SEV_KO.get(h["crit"], h["crit"])}</b></span>'
                      f'<span class="hs" style="color:{sc}">{h["score"]}<small>점</small></span><div class="chips">{chips}</div></div>')
-    return (ph("서버별 신호 점수", tip="서버에서 나온 신호 점수 합\n빨간 칩 = high 룰", tools="서버 4대", right=True)
+    return (ph("서버별 신호 점수", tip="서버마다 신호 유형별 최대값 1개씩 합산\n점수 = 기본 점수 × 서버 중요도 (연결 신뢰도 미적용)\nR16 제외 · 세션 경보와 따로 집계\n빨간 칩 = 높음 규칙", tools="서버 4대", right=True)
             + f'<div class="hosts fx">{"".join(cards)}</div>')
 
 
 def type_row(t, mx):
     style = "font-weight:700" if t["sev"] == "high" else f"color:{MUTE}" if t["id"] == "R16" else ""
-    kind = f'룰 {t["sev"]}' if t["method"] == "rule" else "행동"
+    kind = f'규칙 {SEV_KO.get(t["sev"], "")}' if t["method"] == "rule" else "행동"
     return (f'<div class="trow"><span class="i">{t["id"]}</span><span class="nm" style="{style}" title="{escape(t["name"])} · {kind}">{escape(t["name"])}</span>'
             f'{bar(t["n"] / mx * 100, sev_color(t["id"], t["sev"]))}<span class="val">{t["n"]}</span></div>')
 
@@ -455,13 +471,13 @@ def html_types():
     det = D["detections"]
     ty, hi, top, rest = split_types()
     mx = max(t["n"] for t in ty)
-    segs = [("high 룰", sum(t["n"] for t in hi), RED),
-            ("medium 룰", sum(t["n"] for t in ty if t["sev"] == "medium"), "#C9575A"),
+    segs = [("높음 규칙", sum(t["n"] for t in hi), RED),
+            ("중간 규칙", sum(t["n"] for t in ty if t["sev"] == "medium"), "#C9575A"),
             ("행동", sum(t["n"] for t in ty if t["method"] == "behavior"), NAVY2),
             ("설정 위험", sum(t["n"] for t in ty if t["id"] == "R16"), GRAY)]
     seg = "".join(f'<div style="flex:{n};background:{c}"></div>' for _, n, c in segs)
     segl = "".join(f'<span><i style="background:{c}"></i>{lab} <b>{n}</b></span>' for lab, n, c in segs)
-    return (ph("탐지 신호 유형", tip="R = 룰 탐지 · B = 평소 행동과 비교\nR16은 설정 위험이라 점수 제외",
+    return (ph("탐지 신호 유형", tip="R = 규칙 기반 · B = 행동 기반 (평소와 비교)\nR16은 설정 위험으로 분리 · 점수 제외",
                tools=f'{len(ty)}종 · {det["total"]}건')
             + f'<div class="fx"><div class="seg">{seg}</div><div class="segl">{segl}</div>'
             + "".join(type_row(t, mx) for t in top) + "</div>")
@@ -523,9 +539,9 @@ def html_watch():
     rows = "".join(
         f'<tr><td class="mono">{w["id"]}</td><td class="user">{w["user"]}</td><td><b class="amber">{w["score"]}</b></td>'
         f'<td>{w["start"]}</td><td><span class="chip">{w["sid"]}</span> {w["signal"]}</td><td class="mu">{w["fact"]}</td>'
-        f'<td><span class="tag t-gray">{w["verdict"]}</span></td></tr>' for w in D["watch"])
+        f'<td>{w["tactics"]}</td><td><span class="tag t-gray">경보 기준 미달</span></td></tr>' for w in D["watch"])
     return ('<table class="tbl fx"><thead><tr><th>세션</th><th>사용자</th><th>점수</th><th>시작</th><th>신호</th>'
-            f'<th>근거</th><th>판정</th></tr></thead><tbody>{rows}</tbody></table>')
+            f'<th>근거</th><th>전술</th><th>판정</th></tr></thead><tbody>{rows}</tbody></table>')
 
 
 def html_rules():
@@ -541,9 +557,15 @@ def html_rules():
 
 def html_criteria():
     return ('<div class="cc-row fx">'
-            '<div class="cc"><div class="k">경보</div><div class="v">점수 <span class="red">≥ 100</span> 또는 전술 <span class="red">≥ 3</span></div></div>'
-            '<div class="cc"><div class="k">신호 점수</div><div class="v">기본 × 서버 중요도 × 확신도</div></div>'
-            '<div class="cc"><div class="k">기본점수</div><div class="v">high 60 · medium 30 · 행동 20</div></div></div>')
+            '<div class="cc"><div class="k">경보</div><div class="v">세션 점수 <span class="red">100점 이상</span></div></div>'
+            '<div class="cc"><div class="k">신호 점수</div><div class="v">기본 점수 × 서버 중요도 × 연결 신뢰도</div></div>'
+            '<div class="cc"><div class="k">기본 점수</div><div class="v">규칙 높음 60·중간 30·낮음 10 · 행동 20</div></div>'
+            '<div class="cc"><div class="k">계수</div><div class="v">서버 높음 1.5·중간 1.0 · 연결 직접 1.0·추정 0.8</div></div></div>'
+            '<div class="crit-notes fx">'
+            '<span>같은 세션·같은 유형은 최대값 1개만 반영 후 유형별 합산</span>'
+            '<span>전술은 공격 목적 분류 · 점수는 조사 우선순위용</span>'
+            '<span>설정 문제(R16)는 별도 관리</span>'
+            '<span>행동 기준선: 과거 세션 5개 이상 · 시작 시각 2시간 이상 이탈 · 처음 보는 IP·경로 · 과거 최대 초과</span></div>')
 
 
 def html_logs():
@@ -554,8 +576,13 @@ def html_logs():
         rows.append(f'<tr><td><span class="lg"><i style="background:{LOGC[k]}"></i>{k}</span></td><td><b>{fmt(t)}</b></td>'
                     f'<td style="width:38%">{bar(t / D["logAll"] * 100, LOGC[k])}</td><td>{round(t / len(v))}</td>'
                     f'<td class="mu">{DAYS[mi]} · {v[mi]}</td></tr>')
+    bk = D["buckets"]
+    flow = ('<div class="cc-row fx" style="grid-template-columns:repeat(3,1fr);margin-top:10px">'
+            f'<div class="cc"><div class="k">사용자 업무</div><div class="v">{fmt(bk["session"])}건 → 업무 세션 {D["sessionsAll"]}개</div></div>'
+            f'<div class="cc"><div class="k">시스템 배경</div><div class="v">{fmt(bk["background"])}건</div></div>'
+            f'<div class="cc"><div class="k">외부 시도</div><div class="v">{fmt(bk["external"])}건 → 외부 IP {len(D["external"]["ips"])}개</div></div></div>')
     return ('<table class="tbl fx"><thead><tr><th>로그</th><th>행 수</th><th>비중</th><th>하루 평균</th><th>최다일</th></tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table>')
+            f'<tbody>{"".join(rows)}</tbody></table>' + flow)
 
 
 # ── 조각별 다시 그리기 (토글·선택 때 그 영역만 다시 불러옴) ────────
@@ -567,14 +594,14 @@ def alert_panel():
     users = {a["id"]: a["user"] for a in D["alerts"]}
     sel = st.session_state.get("sel_alert") or ids[0]
     table = st.empty()
-    table.html(ph("경보 세션", len(ids), "red", tip="세션 점수 100 이상\n또는 ATT&CK 전술 3개 이상",
+    table.html(ph("경보 세션", len(ids), "red", tip=TIP_ALERT,
                   tools="점수순 · 아래에서 세션 선택")
                + html_alert_table(sel))
     sel = st.segmented_control("경보 선택", ids, default=ids[0], key="sel_alert",
                                format_func=lambda i: f"{i} · {users[i]}") or ids[0]
     moved = changed("sel_alert", ids[0])
     if moved:
-        table.html(ph("경보 세션", len(ids), "red", tip="세션 점수 100 이상\n또는 ATT&CK 전술 3개 이상",
+        table.html(ph("경보 세션", len(ids), "red", tip=TIP_ALERT,
                       tools="점수순 · 아래에서 세션 선택") + html_alert_table(sel))
     a = next(x for x in D["alerts"] if x["id"] == sel)
     body = st.empty()
@@ -604,7 +631,7 @@ def daily_panel():
 def types_rest():
     _, hi, _, rest = split_types()
     mx = max(t["n"] for t in D["detections"]["types"])
-    on = st.toggle(f"high 룰 {len(hi)}종 {sum(t['n'] for t in hi)}건 · 나머지 {len(rest)}종", key="tg_types")
+    on = st.toggle(f"높음 규칙 {len(hi)}종 {sum(t['n'] for t in hi)}건 · 나머지 {len(rest)}종", key="tg_types")
     opened = changed("tg_types", False)
     if on:
         slot = st.empty()
@@ -617,8 +644,8 @@ def types_rest():
 def drawers():
     """아래 접는 영역 3개. 켜면 그 내용만 불러오는 모습을 보이고 전체 폭으로 연다."""
     n_rule = sum(r["method"] == "rule" for r in D["rules"])
-    items = [("tg_watch", f"주의 세션 {len(D['watch'])}건 · 경보 기준 미달 · 오탐 후보", draw_watch),
-             ("tg_rules", f"판정 기준 · 룰 {n_rule} · 행동 {len(D['rules']) - n_rule}", draw_rules),
+    items = [("tg_watch", f"주의 세션 {len(D['watch'])}건 · 100점 미만 · 경보 기준 미달", draw_watch),
+             ("tg_rules", f"판정 기준 · 규칙 {n_rule} · 행동 {len(D['rules']) - n_rule}", draw_rules),
              ("tg_logs", f"수집 로그 · 4종 · {fmt(D['logAll'])}행", draw_logs)]
     for (key, label, _), col in zip(items, st.columns(3)):
         with col, st.container(key=f"pn_{key}"):
@@ -645,7 +672,7 @@ def draw_rules():
     c1, c2 = st.columns(2)
     rule = [r for r in D["rules"] if r["method"] == "rule"]
     beh = [r for r in D["rules"] if r["method"] == "behavior"]
-    c1.html(f'<div class="mu fx" style="margin-bottom:4px">룰 {len(rule)}개</div>' + tb(rule))
+    c1.html(f'<div class="mu fx" style="margin-bottom:4px">규칙 기반 {len(rule)}개</div>' + tb(rule))
     c2.html(f'<div class="mu fx" style="margin-bottom:4px">행동 {len(beh)}개</div>' + tb(beh))
 
 
