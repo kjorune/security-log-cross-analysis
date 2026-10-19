@@ -6,7 +6,7 @@ import components as C
 import loaders as L
 import theme as T
 
-T.hero("경보 목록", "위험점수와 ATT&CK 전술 수로 정한 경보를 우선순위대로 봅니다. 점수가 있지만 경보가 아닌 세션도 함께 확인합니다.")
+T.hero("경보 목록", "위험점수로 정한 경보를 우선순위대로 봅니다. 점수가 있지만 경보가 아닌 세션도 함께 확인합니다.")
 C.page_note()
 
 ss = L.sessions_full()
@@ -88,8 +88,7 @@ else:
                      categoryarray=list(scored["work_session_id"] + " " + scored["person_candidate"]))
     fig.update_xaxes(title="위험점수")
     C.show(C.style(fig, height=36 * len(scored) + 100), key="al_bar")
-    st.caption("경보 기준은 **점수 100 이상 또는 ATT&CK 전술 3개 이상**입니다. 막대의 점수 기준만으로는 경보가 다 설명되지 않습니다 "
-               "(전술 기준은 룰 탐지에서만 셉니다). 점수 0인 세션은 생략했습니다.")
+    st.caption("경보 기준은 **세션 점수 100 이상**입니다. 전술 수는 공격 목적 분류로만 표시합니다. 점수 0인 세션은 생략했습니다.")
 
 # ---------------------------------------------------------------- 비경보 점수 세션
 st.markdown("#### 경보가 아닌 점수 세션")

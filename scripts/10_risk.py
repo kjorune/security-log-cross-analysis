@@ -22,7 +22,7 @@ from common import BASELINE, DETECTIONS, ENRICHED, RISK, SESSIONS, read_rows, wr
 BASE = {"rule": {"high": 60, "medium": 30, "low": 10}, "behavior": 20}
 CRIT = {"high": 1.5, "medium": 1.0}
 CONF = {"direct": 1.0, "linked": 0.8}
-ALERT_SCORE, ALERT_TACTICS = 100, 3
+ALERT_SCORE = 100  # 경보: 세션 점수 100점 이상. 전술 수는 공격 목적 분류로만 남기고 경보 조건에 쓰지 않는다
 CONFIG_RULES = {"R16"}
 
 TACTIC = {  # 계획 6-3
@@ -82,7 +82,7 @@ def score_sessions(base=BASE, conf=CONF):
 
 
 def alerts_of(scored):
-    return {sid for sid, o in scored.items() if o["score"] >= ALERT_SCORE or len(o["tactics"]) >= ALERT_TACTICS}
+    return {sid for sid, o in scored.items() if o["score"] >= ALERT_SCORE}
 
 
 def top10(scored):
@@ -108,8 +108,6 @@ for s in sessions:
     reasons = []
     if o["score"] >= ALERT_SCORE:
         reasons.append(f"점수 {o['score']:g} ≥ {ALERT_SCORE}")
-    if len(o["tactics"]) >= ALERT_TACTICS:
-        reasons.append(f"전술 {len(o['tactics'])}개 ≥ {ALERT_TACTICS}")
     sess_rows.append({
         "work_session_id": s["work_session_id"], "person_candidate": s["person_candidate"],
         "session_type": s["session_type"], "client_ip": s["client_ip"], "start_utc": s["start_utc"],

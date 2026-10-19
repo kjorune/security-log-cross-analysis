@@ -205,7 +205,7 @@ def f1_risk():
         ax.text(v + 6, y, f"{v:.0f}점" + ("  · 경보" if a else ""), va="center", fontsize=10, color=INK,
                 fontweight="bold" if a else "normal")
     ax.axvline(100, color=INK2, linestyle="--", linewidth=1.5)
-    ax.text(103, -0.9, "경보 기준: 100점 이상 또는 전술 3개 이상", fontsize=10, color=INK)
+    ax.text(103, -0.9, "경보 기준: 세션 100점 이상", fontsize=10, color=INK)
     ax.set_xlim(0, 500)
     ax.set_ylim(-1.3, len(nz) - 0.4)
     ax.set_xlabel("세션 위험점수")
